@@ -74,6 +74,17 @@ object RuntimePermissionsUpgradeController {
 
         GlobalScope.launch(IPC) {
             val upgradedVersion = onUpgradeLocked(context, currentVersion)
+            if (upgradedVersion != LATEST_VERSION) {
+                Log.wtf(
+                    "PermissionControllerService",
+                    "warning: upgrading permission database" +
+                        " to version $LATEST_VERSION left it at $currentVersion instead; this is " +
+                        "probably a bug. Did you update LATEST_VERSION?",
+                    Throwable(),
+                )
+                throw RuntimeException("db upgrade error")
+            }
+
             if (storedVersion != upgradedVersion) {
                 permissionManager.runtimePermissionsVersion = LATEST_VERSION
             }
@@ -91,7 +102,7 @@ object RuntimePermissionsUpgradeController {
     private fun getExemptions(
         permissions: Set<String>,
         pkgs: List<LightPackageInfo>,
-        flags: Int = FLAG_PERMISSION_WHITELIST_UPGRADE
+        flags: Int = FLAG_PERMISSION_WHITELIST_UPGRADE,
     ): List<RestrictionExemption> {
         val exemptions = mutableListOf<RestrictionExemption>()
 
@@ -373,7 +384,7 @@ object RuntimePermissionsUpgradeController {
                                 pkgInfoProvider.value!!,
                                 bgGroups,
                                 storageGroups,
-                                bgSensorsGroups
+                                bgSensorsGroups,
                             )
                     }
                 }
@@ -398,7 +409,7 @@ object RuntimePermissionsUpgradeController {
                 upgradeData.bgGroups,
                 upgradeData.storageGroups,
                 upgradeData.bgSensorsGroups,
-                isDeviceUpgrading
+                isDeviceUpgrading,
             )
 
         // Do not run in parallel. Measurements have shown that this is slower than sequential
@@ -420,7 +431,7 @@ object RuntimePermissionsUpgradeController {
         bgApps: List<LightAppPermGroup>,
         storageAndMediaAppPermGroups: List<LightAppPermGroup>,
         bgSensorsGroups: List<LightAppPermGroup>,
-        isDeviceUpgrading: Boolean
+        isDeviceUpgrading: Boolean,
     ): Triple<Int, List<RestrictionExemption>, List<Grant>> {
         val exemptions = mutableListOf<RestrictionExemption>()
         val grants = mutableListOf<Grant>()
@@ -483,7 +494,7 @@ object RuntimePermissionsUpgradeController {
                         perm.permInfo,
                         perm.isGranted,
                         perm.flags or FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT,
-                        perm.foregroundPerms
+                        perm.foregroundPerms,
                     )
 
                 bgAppsWithExemption[pkgName] =
@@ -540,7 +551,7 @@ object RuntimePermissionsUpgradeController {
                 Log.i(
                     LOG_TAG,
                     "Not expanding location permissions as this is not an upgrade " +
-                        "from Android P"
+                        "from Android P",
                 )
             }
 
@@ -557,10 +568,10 @@ object RuntimePermissionsUpgradeController {
 
                     if (
                         !perm.isGranted &&
-                        !perm.isUserSet &&
-                        !perm.isOneTime &&
-                        !perm.isSystemFixed &&
-                        !perm.isPolicyFixed
+                            !perm.isUserSet &&
+                            !perm.isOneTime &&
+                            !perm.isSystemFixed &&
+                            !perm.isPolicyFixed
                     ) {
                         grants.add(
                             Grant(false, appPermGroup, listOf(permission.ACCESS_MEDIA_LOCATION))
@@ -570,7 +581,7 @@ object RuntimePermissionsUpgradeController {
             } else {
                 Log.i(
                     LOG_TAG,
-                    "Not expanding read storage to access media location as this is " + "a new user"
+                    "Not expanding read storage to access media location as this is " + "a new user",
                 )
             }
 
@@ -587,13 +598,13 @@ object RuntimePermissionsUpgradeController {
             if (isNewUser) {
                 Log.i(
                     LOG_TAG,
-                    "Not migrating STORAGE and BODY_SENSORS permissions as this is a new user"
+                    "Not migrating STORAGE and BODY_SENSORS permissions as this is a new user",
                 )
             } else if (!isDeviceUpgrading) {
                 Log.i(
                     LOG_TAG,
                     "Not migrating STORAGE and BODY_SENSORS permissions as" +
-                        " this device is not performing an upgrade"
+                        " this device is not performing an upgrade",
                 )
             } else {
                 Log.i(LOG_TAG, "Migrating STORAGE permissions to READ_MEDIA permissions")
@@ -624,8 +635,11 @@ object RuntimePermissionsUpgradeController {
                                 it.permGroupInfo.name == permission_group.READ_MEDIA_VISUAL &&
                                 !it.permissions
                                     .filter { it.key != permission.ACCESS_MEDIA_LOCATION }
-                                    .any { it.value.isUserSet || it.value.isOneTime ||
-                                        it.value.isUserFixed }
+                                    .any {
+                                        it.value.isUserSet ||
+                                            it.value.isOneTime ||
+                                            it.value.isUserFixed
+                                    }
                         }
 
                     if (auralAppPermGroup != null) {
@@ -654,7 +668,7 @@ object RuntimePermissionsUpgradeController {
                         RestrictionExemption(
                             pkgName,
                             permission.BODY_SENSORS_BACKGROUND,
-                            FLAG_PERMISSION_WHITELIST_UPGRADE
+                            FLAG_PERMISSION_WHITELIST_UPGRADE,
                         )
                     )
 
@@ -665,7 +679,7 @@ object RuntimePermissionsUpgradeController {
                             perm.permInfo,
                             perm.isGranted,
                             perm.flags or FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT,
-                            perm.foregroundPerms
+                            perm.foregroundPerms,
                         )
                     val group =
                         LightAppPermGroup(
@@ -696,7 +710,7 @@ object RuntimePermissionsUpgradeController {
                 Log.i(
                     LOG_TAG,
                     "Grandfathering READ_MEDIA_VISUAL_USER_SELECTED to apps already " +
-                        "granted visual permissions"
+                        "granted visual permissions",
                 )
                 val visualAppPermGroups =
                     storageAndMediaAppPermGroups.filter {
@@ -743,7 +757,7 @@ object RuntimePermissionsUpgradeController {
         /** Name of permissions to exempt */
         val permission: String,
         /** Name of permissions to exempt */
-        val flags: Int = FLAG_PERMISSION_WHITELIST_UPGRADE
+        val flags: Int = FLAG_PERMISSION_WHITELIST_UPGRADE,
     ) {
         /**
          * Exempt the permission by updating the platform state.
@@ -762,7 +776,7 @@ object RuntimePermissionsUpgradeController {
         /** Group to be granted */
         private val group: LightAppPermGroup,
         /** Which of the permissions in the group should be granted */
-        private val permissions: List<String> = group.permissions.keys.toList()
+        private val permissions: List<String> = group.permissions.keys.toList(),
     ) {
         /**
          * Grant the permission by updating the platform state.
@@ -776,7 +790,7 @@ object RuntimePermissionsUpgradeController {
 
                 logRuntimePermissionUpgradeResult(
                     newGroup,
-                    permissions intersect newGroup.backgroundPermNames
+                    permissions intersect newGroup.backgroundPermNames,
                 )
             } else {
                 val newGroup =
@@ -784,7 +798,7 @@ object RuntimePermissionsUpgradeController {
 
                 logRuntimePermissionUpgradeResult(
                     newGroup,
-                    permissions intersect newGroup.foregroundPermNames
+                    permissions intersect newGroup.foregroundPermNames,
                 )
             }
         }
@@ -797,7 +811,7 @@ object RuntimePermissionsUpgradeController {
          */
         private fun logRuntimePermissionUpgradeResult(
             permissionGroup: LightAppPermGroup,
-            filterPermissions: Iterable<String>
+            filterPermissions: Iterable<String>,
         ) {
             val uid = permissionGroup.packageInfo.uid
             val packageName = permissionGroup.packageName
@@ -807,7 +821,7 @@ object RuntimePermissionsUpgradeController {
                     RUNTIME_PERMISSIONS_UPGRADE_RESULT,
                     permission.name,
                     uid,
-                    packageName
+                    packageName,
                 )
                 Log.i(
                     LOG_TAG,
@@ -816,7 +830,7 @@ object RuntimePermissionsUpgradeController {
                         " uid=" +
                         uid +
                         " packageName=" +
-                        packageName
+                        packageName,
                 )
             }
         }
